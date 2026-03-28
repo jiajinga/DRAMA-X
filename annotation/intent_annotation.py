@@ -5,8 +5,8 @@ This script processes videos to annotate object intents in frames.
 Key features:
 - Handles videos from moving vehicle perspective
 - Scales bounding boxes (video frames are half size of reference)
-- Annotates vertical intent (along road) and lateral intent (across frame)
-- Considers motion relative to road, not the moving vehicle
+- Annotates vertical intent (along road) and lateral intent (across frame)  意图
+- Considers motion relative to road, not the moving vehicle  运动是相对于道路的，而不是相对于移动的车辆
 """
 
 import cv2
@@ -63,6 +63,7 @@ def detect_cycles(frame: np.ndarray, confidence_threshold: float = 0.5) -> List[
 
     return boxes
 
+# 依据中心点和垂直位置关系判断是否为骑行者
 def check_cyclist_association(person_box: List[float],
                             cycle_box: List[float],
                             max_vertical_offset: float = 160.0,
@@ -287,6 +288,7 @@ def get_centroid(box: List[int]) -> Tuple[int, int]:
     x1, y1, x2, y2 = box
     return (int((x1 + x2) / 2), int((y1 + y2) / 2))
 
+# 用光流法估计相机运动
 def estimate_camera_motion(frame1: np.ndarray, frame2: np.ndarray) -> Tuple[float, float]:
     """
     Estimate camera motion between two frames using optical flow.
@@ -326,6 +328,7 @@ def estimate_camera_motion(frame1: np.ndarray, frame2: np.ndarray) -> Tuple[floa
 
     return 0, 0
 
+# 计算从开始到最后的位移
 def calculate_displacement(points: List[Tuple[float, float]]) -> Tuple[float, Tuple[float, float], Tuple[float, float], float, float]:
     """Calculate net displacement between first and last point"""
     if len(points) < 2:
@@ -412,6 +415,7 @@ def calculate_appearance_similarity(frame1: np.ndarray, frame2: np.ndarray,
     except:
         return 0.0
 
+# 评判两个轨迹是否应该合并，考虑时间间隔、空间距离、运动一致性和外观相似度等多个因素
 def should_merge_tracks(track1: Dict, track2: Dict,
                        max_frame_gap: int = 15,
                        max_spatial_dist: float = 100.0) -> bool:
@@ -537,6 +541,7 @@ def link_broken_tracks(track_histories: Dict[int, Dict],
 
     return merged_tracks
 
+# 这个函数是整个流程的核心，处理视频帧，跟踪对象，分析意图，并返回跟踪历史
 def process_video(video_url: str, intent_analyzer: IntentAnalyzer,
                  conf_threshold: float = 0.25) -> Dict[int, Dict]:
     """
@@ -669,6 +674,7 @@ def process_video(video_url: str, intent_analyzer: IntentAnalyzer,
     yolo_model.predictor.trackers[0].reset()
     return track_histories
 
+# 这个函数用于在视频帧上绘制网格和坐标，帮助可视化对象位置和运动轨迹
 def display_frame_with_grid(frame: np.ndarray):
     """
     Display the frame with a grid and x, y coordinates using cv2_imshow.
@@ -695,6 +701,7 @@ def display_frame_with_grid(frame: np.ndarray):
     # Display the frame with the grid
     # cv2_imshow(frame)
 
+# 这个函数实现了一个简单的贪心匹配算法，用于在成本矩阵中找到最佳匹配对，作为匈牙利算法的备选方案
 def greedy_match(cost_matrix, track_ids, input_ids):
     # Flatten and sort (i,j) pairs by cost
     flat = [(i,j,c) for i,row in enumerate(cost_matrix)
@@ -707,7 +714,7 @@ def greedy_match(cost_matrix, track_ids, input_ids):
             used_t.add(i); used_i.add(j)
     return matches
 
-
+# 计算输入框与跟踪框的最佳IoU，用于匹配对象。这对应的是原文中获取到全部数据后和 ground truth 进行匹配，以补全
 def best_iou_batch(track_boxes: np.ndarray, input_box: np.ndarray) -> float:
     # track_boxes: (M,4), input_box: (4,)
     x1 = np.maximum(track_boxes[:,0], input_box[0])
@@ -825,7 +832,7 @@ def remove_duplicate_boxes(input_boxes: Dict[str, Dict], iou_threshold: float = 
 
 from matplotlib import animation
 
-
+# 这个函数使用光流法计算视频帧之间的运动，并创建一个动画来可视化这些运动。它可以帮助我们理解视频中对象的动态行为。
 def animate_optical_flow(video_path, max_frames=100, step=1):
     cap = cv2.VideoCapture(video_path)
 
@@ -878,7 +885,7 @@ def animate_optical_flow(video_path, max_frames=100, step=1):
     ani = animation.FuncAnimation(fig, update, frames=len(frames), interval=50, blit=True)
     # display(HTML(ani.to_jshtml()))
 
-
+# 这个函数计算在不同边距下的光流，并返回所有边距的中位数。它可以帮助我们理解在不同空间范围内对象的运动趋势。
 def get_median_optical_flow_multiple_margins(video_path, point, box_size=(50, 150), margins=[50, 70,  100, 120, 150, 170, 200, 50], max_frames=100, y_shift = False, margin_add = 0):
     """
     For each margin, sums per-pixel flow across frames in adjacent box, then computes the median dx, dy.
@@ -971,6 +978,7 @@ def get_median_optical_flow_multiple_margins(video_path, point, box_size=(50, 15
     print(f"\n→ Overall Median dx = {overall_median_dx:.2f}, dy = {overall_median_dy:.2f}")
     return overall_median_dx, overall_median_dy
 
+# 这个函数是上一个函数的简化版本，只计算一个边距下的光流中位数。它可以作为快速评估对象运动趋势的工具。
 def get_median_optical_flow(video_path, point, box_h = 150,  max_frames=100, y_shift = False):
     """
     For each margin, sums per-pixel flow across frames in adjacent box, then computes the median dx, dy.
@@ -1070,7 +1078,7 @@ def get_median_optical_flow(video_path, point, box_h = 150,  max_frames=100, y_s
     return median_dx, median_dy
 
 
-
+# 这个函数应该是完整的数据处理流程
 def process_dataset(dataset_filepath: str, original_dataset_filepath:str, output_dir: str, output_json: str, diff_keys = None):
     """Process entire dataset and save results"""
     # Load dataset
@@ -1205,6 +1213,7 @@ from multiprocessing import Pool, cpu_count
 from itertools import islice
 from tqdm import tqdm
 
+# 这个函数是上一个函数的并行版本，使用 multiprocessing 库来加速处理整个数据集。它将每个样本的处理任务分配给多个进程，以提高效率。
 def process_dataset_parallel(dataset_filepath: str, original_dataset_filepath: str, output_dir: str, output_json: str):
     """Process entire dataset and save results"""
     # Load dataset
